@@ -1,0 +1,12 @@
+{
+  "name": "python-node-test",
+  "version": "1.0.0",
+  "description": "Node.jsとPythonサーバーの連携テスト",
+  "main": "client.js",
+  "dependencies": {
+    "axios": "^1.8.4"
+  },
+  "scripts": {
+    "start": "node client.js"
+  }
+}

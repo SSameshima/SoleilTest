@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>位置情報データ管理</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+        }
+        input {
+            padding: 8px;
+            width: 200px;
+        }
+        button {
+            padding: 10px 20px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        .delete-btn {
+            background-color: #f44336;
+            padding: 5px 10px;
+        }
+        .delete-btn:hover {
+            background-color: #da190b;
+        }
+        #dataDisplay {
+            margin-top: 20px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: left;
+        }
+        th {
+            background-color: #f2f2f2;
+        }
+        .update-btn {
+            background-color: #4CAF50;
+            padding: 5px 10px;
+            margin-right: 5px;
+        }
+        .update-btn:hover {
+            background-color: #45a049;
+        }
+    </style>
+</head>
+<body>
+    <h1>位置情報データ管理</h1>
+    
+    <div id="qrcode" style="margin: 20px 0;">
+        <p>モバイル端末からアクセスする場合：</p>
+        <div id="connection-status"></div>
+        <div id="qrcode-container"></div>
+        <p id="server-url" style="margin-top: 10px; font-size: 1.2em; font-weight: bold; color: #333;">
+            サーバーアドレス: http://{{ server_ip }}:5000
+        </p>
+    </div>
+
+    <div class="form-group">
+        <label for="place">場所 (Building):</label>
+        <input type="text" id="place" placeholder="例: buildingA">
+    </div>
+    
+    <div class="form-group">
+        <label for="count">人数:</label>
+        <input type="number" id="count" placeholder="例: 2">
+    </div>
+    
+    <button onclick="submitData()">データを保存</button>
+
+    <div id="dataDisplay">
+        <h2>保存されているデータ</h2>
+        <div style="margin-bottom: 10px;">
+            <label>
+                <input type="checkbox" id="autoRefresh" checked> 自動更新
+            </label>
+            <select id="refreshInterval" style="margin-left: 10px;">
+                <option value="5000">5秒</option>
+                <option value="10000">10秒</option>
+                <option value="30000">30秒</option>
+            </select>
+        </div>
+        <button onclick="refreshData()">更新</button>
+        <table>
+            <thead>
+                <tr>
+                    <th>場所</th>
+                    <th>人数</th>
+                    <th>タイムスタンプ</th>
+                    <th>操作</th>
+                </tr>
+            </thead>
+            <tbody id="dataTable">
+            </tbody>
+        </table>
+    </div>
+
+    <script>
+        // サーバーのベースURL
+        const serverUrl = 'http://{{ server_ip }}:5000';
+
+        let autoRefreshTimer = null;
+        let isInputFocused = false;
+
+        // 自動更新の開始
+        function startAutoRefresh() {
+            const interval = parseInt(document.getElementById('refreshInterval').value);
+            if (autoRefreshTimer) {
+                clearInterval(autoRefreshTimer);
+            }
+            if (document.getElementById('autoRefresh').checked && !isInputFocused) {
+                autoRefreshTimer = setInterval(refreshData, interval);
+            }
+        }
+
+        // 自動更新の一時停止
+        function pauseAutoRefresh() {
+            if (autoRefreshTimer) {
+                clearInterval(autoRefreshTimer);
+                autoRefreshTimer = null;
+            }
+        }
+
+        // オンライン状態の確認
+        function checkOnlineStatus() {
+            const status = navigator.onLine;
+            const statusDiv = document.getElementById('connection-status');
+            const qrcodeDiv = document.getElementById('qrcode-container');
+
+            if (status) {
+                statusDiv.innerHTML = '<p style="color: green;">✓ オンライン - QRコードが利用可能です</p>';
+                generateQRCode();
+            } else {
+                statusDiv.innerHTML = '<p style="color: #666;">⚠ オフライン - 上記のアドレスを直接入力してください</p>';
+                qrcodeDiv.innerHTML = '';
+            }
+        }
+
+        // オンライン状態の変化を監視
+        window.addEventListener('online', checkOnlineStatus);
+        window.addEventListener('offline', checkOnlineStatus);
+
+        // QRコードを生成して表示
+        function generateQRCode() {
+            const qrcodeContainer = document.getElementById('qrcode-container');
+            qrcodeContainer.innerHTML = ''; // 既存のQRコードをクリア
+            new QRCode(qrcodeContainer, {
+                text: serverUrl,
+                width: 200,
+                height: 200,
+                colorDark : "#000000",
+                colorLight : "#ffffff",
+                correctLevel : QRCode.CorrectLevel.H
+            });
+        }
+
+        // データを送信
+        async function submitData() {
+            const place = document.getElementById('place').value;
+            const count = document.getElementById('count').value;
+
+            if (!place || !count) {
+                alert('場所と人数を入力してください');
+                return;
+            }
+
+            try {
+                const response = await fetch(`${serverUrl}/api/location`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        place_pos: place,
+                        count_person: count,
+                        timestamp: new Date().toISOString()
+                    })
+                });
+
+                const result = await response.json();
+                refreshData();
+                
+                // フォームをクリア
+                document.getElementById('place').value = '';
+                document.getElementById('count').value = '';
+            } catch (error) {
+                console.error('エラーが発生しました:', error);
+            }
+        }
+
+        // データを削除
+        async function deleteData(place) {
+            if (!confirm(`${place}のデータを削除してもよろしいですか？`)) {
+                return;
+            }
+
+            try {
+                const response = await fetch(`${serverUrl}/api/location?place=${encodeURIComponent(place)}`, {
+                    method: 'DELETE'
+                });
+
+                const result = await response.json();
+                refreshData();
+            } catch (error) {
+                console.error('エラーが発生しました:', error);
+            }
+        }
+
+        // データを取得して表示
+        async function refreshData() {
+            try {
+                const response = await fetch(`${serverUrl}/api/location`);
+                const data = await response.json();
+                
+                const tbody = document.getElementById('dataTable');
+                tbody.innerHTML = '';
+                
+                data.locations.forEach(item => {
+                    const row = tbody.insertRow();
+                    row.insertCell(0).textContent = item.place_pos;
+                    
+                    // 人数を編集可能なセルに変更
+                    const countCell = row.insertCell(1);
+                    const countInput = document.createElement('input');
+                    countInput.type = 'number';
+                    countInput.value = item.count_person;
+                    countInput.style.width = '60px';
+                    countInput.min = '0';
+                    countInput.step = '1';
+                    countInput.pattern = '[0-9]*';
+                    // フォーカス時の自動更新制御
+                    countInput.addEventListener('focus', () => {
+                        isInputFocused = true;
+                        pauseAutoRefresh();
+                    });
+                    countInput.addEventListener('blur', () => {
+                        isInputFocused = false;
+                        // 値が変更されていれば更新を実行
+                        const newValue = parseInt(countInput.value);
+                        if (!isNaN(newValue) && newValue >= 0) {
+                            updateCount(item.place_pos, newValue);
+                        }
+                        startAutoRefresh();
+                    });
+                    countCell.appendChild(countInput);
+                    
+                    row.insertCell(2).textContent = new Date(item.timestamp).toLocaleString();
+                    
+                    // 操作セルに更新ボタンと削除ボタンを追加
+                    const actionCell = row.insertCell(3);
+                    
+                    const updateButton = document.createElement('button');
+                    updateButton.textContent = '更新';
+                    updateButton.className = 'update-btn';
+                    updateButton.onclick = () => updateCount(item.place_pos, countInput.value);
+                    actionCell.appendChild(updateButton);
+                    
+                    const deleteButton = document.createElement('button');
+                    deleteButton.textContent = '削除';
+                    deleteButton.className = 'delete-btn';
+                    deleteButton.onclick = () => deleteData(item.place_pos);
+                    actionCell.appendChild(deleteButton);
+                });
+            } catch (error) {
+                console.error('データの取得に失敗しました:', error);
+            }
+        }
+
+        // 人数を更新する関数
+        async function updateCount(place, newCount) {
+            // 入力値を数値として取得
+            const count = parseInt(newCount);
+
+            // 入力値の検証
+            if (!newCount) {
+                alert('人数を入力してください');
+                return;
+            }
+            if (isNaN(count) || count < 0) {
+                alert('有効な人数を入力してください');
+                return;
+            }
+
+            try {
+                const response = await fetch(`${serverUrl}/api/location`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        place_pos: place,
+                        count_person: count,
+                        timestamp: new Date().toISOString()
+                    })
+                });
+
+                const result = await response.json();
+                refreshData();
+            } catch (error) {
+                console.error('エラーが発生しました:', error);
+                alert('更新に失敗しました。もう一度お試しください。');
+            }
+        }
+
+        // 初回データ表示と自動更新の開始
+        refreshData();
+        startAutoRefresh();
+        checkOnlineStatus();
+    </script>
+</body>
+</html> 
