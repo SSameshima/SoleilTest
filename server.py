@@ -72,8 +72,11 @@ def get_local_ip():
 @app.route('/')
 def index():
     """Web UIを提供"""
-    # Renderの公開URLを直接渡す
+    # Renderの公開URLを直接渡す（httpやポート番号を含めず）
     public_url = os.getenv('PUBLIC_URL', 'https://soleiltest.onrender.com')
+    # http(s)://が重複しないように整形
+    public_url = public_url.replace('http://', '').replace('https://', '')
+    public_url = f'https://{public_url}'
     return render_template('index.html', server_ip=public_url)
 
 @app.route('/api/test', methods=['GET'])
