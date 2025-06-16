@@ -157,10 +157,10 @@ def handle_location():
             'message': f'データの取得中にエラーが発生しました: {str(e)}'
         }), 500
 
+# データベースの初期化（本番環境でも必ず実行）
+init_db()
+
 if __name__ == '__main__':
-    # データベースの初期化
-    init_db()
-    
     # 起動時のメッセージを表示
     local_ip = get_local_ip()
     print(f"\nサーバーが起動しました！")
