@@ -147,20 +147,19 @@ def handle_location():
                 'message': f'データの削除中にエラーが発生しました: {str(e)}'
             }), 500
     
-# GETリクエストの場合、保存されているデータを全て返す
-try:
-    locations = db.query(Location).all()
-    print(f"[DEBUG] locations count: {len(locations)}")
-    return jsonify({'locations': [location.to_dict() for location in locations]})
-except Exception as e:
-    import traceback
-    print("[ERROR] /api/location GET failed")
-    traceback.print_exc()
-    return jsonify({
-        'status': 'エラー',
-        'message': f'データの取得中にエラーが発生しました: {str(e)}'
-    }), 500
-
+    # GETリクエストの場合
+    try:
+        locations = db.query(Location).all()
+        print(f"[DEBUG] locations count: {len(locations)}")
+        return jsonify({'locations': [location.to_dict() for location in locations]})
+    except Exception as e:
+        import traceback
+        print("[ERROR] /api/location GET failed")
+        traceback.print_exc()
+        return jsonify({
+            'status': 'エラー',
+            'message': f'データの取得中にエラーが発生しました: {str(e)}'
+        }), 500
 
 # データベースの初期化（本番環境でも必ず実行）
 init_db()
