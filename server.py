@@ -7,6 +7,7 @@ from logging.config import dictConfig
 import time
 from models import Location, get_db, init_db
 from sqlalchemy.orm import Session
+from contextlib import closing
 
 # ログ設定
 dictConfig({
@@ -85,81 +86,80 @@ def test():
 
 @app.route('/api/location', methods=['GET', 'POST', 'DELETE'])
 def handle_location():
-    db: Session = next(get_db())
-    
-    if request.method == 'POST':
-        data = request.get_json()
-        if not all(key in data for key in ['place_pos', 'count_person']):
-            return jsonify({
-                'status': 'エラー',
-                'message': '必要なデータが不足しています（place_pos, count_person が必要です）'
-            }), 400
+    with closing(next(get_db())) as db:
+        if request.method == 'POST':
+            data = request.get_json()
+            if not all(key in data for key in ['place_pos', 'count_person']):
+                return jsonify({
+                    'status': 'エラー',
+                    'message': '必要なデータが不足しています（place_pos, count_person が必要です）'
+                }), 400
 
-        try:
-            # 既存のレコードを確認
-            location = db.query(Location).filter(Location.place_pos == data['place_pos']).first()
-            
-            if location:
-                # 既存のレコードを更新
-                location.count_person = data['count_person']
-                if 'timestamp' in data:
-                    location.timestamp = data['timestamp']
-            else:
-                # 新しいレコードを作成
-                location = Location(
-                    place_pos=data['place_pos'],
-                    count_person=data['count_person'],
-                    timestamp=data.get('timestamp')
-                )
-                db.add(location)
-            
-            db.commit()
-            return jsonify({'status': '成功', 'message': 'データが保存されました'})
-            
-        except Exception as e:
-            db.rollback()
-            return jsonify({
-                'status': 'エラー',
-                'message': f'データの保存中にエラーが発生しました: {str(e)}'
-            }), 500
-    
-    elif request.method == 'DELETE':
-        place = request.args.get('place')
-        if not place:
-            return jsonify({
-                'status': 'エラー',
-                'message': '削除する場所を指定してください'
-            }), 400
-
-        try:
-            location = db.query(Location).filter(Location.place_pos == place).first()
-            if location:
-                db.delete(location)
-                db.commit()
-                return jsonify({'status': '成功', 'message': f'{place}のデータを削除しました'})
-            else:
-                return jsonify({'status': 'エラー', 'message': f'{place}のデータが見つかりません'}), 404
+            try:
+                # 既存のレコードを確認
+                location = db.query(Location).filter(Location.place_pos == data['place_pos']).first()
                 
+                if location:
+                    # 既存のレコードを更新
+                    location.count_person = data['count_person']
+                    if 'timestamp' in data:
+                        location.timestamp = data['timestamp']
+                else:
+                    # 新しいレコードを作成
+                    location = Location(
+                        place_pos=data['place_pos'],
+                        count_person=data['count_person'],
+                        timestamp=data.get('timestamp')
+                    )
+                    db.add(location)
+                
+                db.commit()
+                return jsonify({'status': '成功', 'message': 'データが保存されました'})
+                
+            except Exception as e:
+                db.rollback()
+                return jsonify({
+                    'status': 'エラー',
+                    'message': f'データの保存中にエラーが発生しました: {str(e)}'
+                }), 500
+        
+        elif request.method == 'DELETE':
+            place = request.args.get('place')
+            if not place:
+                return jsonify({
+                    'status': 'エラー',
+                    'message': '削除する場所を指定してください'
+                }), 400
+
+            try:
+                location = db.query(Location).filter(Location.place_pos == place).first()
+                if location:
+                    db.delete(location)
+                    db.commit()
+                    return jsonify({'status': '成功', 'message': f'{place}のデータを削除しました'})
+                else:
+                    return jsonify({'status': 'エラー', 'message': f'{place}のデータが見つかりません'}), 404
+                    
+            except Exception as e:
+                db.rollback()
+                return jsonify({
+                    'status': 'エラー',
+                    'message': f'データの削除中にエラーが発生しました: {str(e)}'
+                }), 500
+        
+        # GETリクエストの場合
+        try:
+            locations = db.query(Location).all()
+            print(f"[DEBUG] locations count: {len(locations)}")
+            return jsonify({'locations': [location.to_dict() for location in locations]})
         except Exception as e:
-            db.rollback()
+            import traceback
+            print("[ERROR] /api/location GET failed")
+            traceback.print_exc()
             return jsonify({
                 'status': 'エラー',
-                'message': f'データの削除中にエラーが発生しました: {str(e)}'
+                'message': f'データの取得中にエラーが発生しました: {str(e)}'
             }), 500
-    
-    # GETリクエストの場合
-    try:
-        locations = db.query(Location).all()
-        print(f"[DEBUG] locations count: {len(locations)}")
-        return jsonify({'locations': [location.to_dict() for location in locations]})
-    except Exception as e:
-        import traceback
-        print("[ERROR] /api/location GET failed")
-        traceback.print_exc()
-        return jsonify({
-            'status': 'エラー',
-            'message': f'データの取得中にエラーが発生しました: {str(e)}'
-        }), 500
 
 # データベースの初期化（本番環境でも必ず実行）
 init_db()
